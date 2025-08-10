@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Programator Pacienți — final (all features)</title>
+  <style>
+    :root{--timeline-height:1440px;--time-col-width:70px;--cab-width:300px}
+    *{box-sizing:border-box;font-family:Inter, Roboto, Arial}
+    body{margin:0;background:#f3f4f6;color:#111}
+
+    .topbar{display:flex;gap:12px;padding:12px;background:#fff;align-items:center;border-bottom:1px solid #e5e7eb}
+    .date-stack{display:flex;flex-direction:column;gap:8px}
+    .date-row{display:flex;gap:8px;align-items:center}
+    .date-scroll{display:flex;gap:6px;overflow-x:auto;padding:6px}
+    .date-item{background:#fff;padding:6px 10px;border-radius:6px;border:1px solid #eee;cursor:pointer;white-space:nowrap}
+    .date-item.active{background:#2563eb;color:#fff;border-color:#2563eb}
+
+    .app{display:flex;height:calc(100vh - 72px);overflow:hidden}
+    .times{width:var(--time-col-width);background:#fff;border-right:1px solid #e5e7eb;padding:8px 6px;overflow:auto}
+    .times .slot{height:60px;border-bottom:1px dashed #eee;position:relative;padding-left:6px;font-size:12px;color:#666}
+    .board{flex:1;display:flex;overflow:auto;background:linear-gradient(180deg,#fff,#fbfdff)}
+    .cabinet{width:var(--cab-width);min-width:var(--cab-width);border-right:1px solid #e6e7ea;position:relative}
+    .cabinet .header{padding:8px;text-align:center;background:#fafafa;font-weight:700;border-bottom:1px solid #eee;position:sticky;top:0;z-index:3}
+    .timeline{position:relative;height:var(--timeline-height)}
+
+    /* appointment style */
+    .appt{position:absolute;border-radius:8px;padding:4px 8px;color:#111;cursor:grab;display:flex;align-items:center;justify-content:space-between;font-weight:600;box-shadow:0 6px 14px rgba(12,12,12,0.08);overflow:hidden;transition:all .12s ease}
+    .appt .label{z-index:2;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px}
+    .appt .meta{font-size:11px;opacity:.9}
+    .appt .resize{position:absolute;right:4px;bottom:3px;width:12px;height:12px;border-radius:2px;background:rgba(255,255,255,0.9);border:1px solid rgba(0,0,0,0.08);cursor:s-resize;z-index:5}
+    .appt.expanded{width:calc(100% + 40px); left: calc( -20px + var(--left-start, 0)); z-index:30; box-shadow:0 12px 30px rgba(12,12,12,0.18)}
+
+    /* create a visible left zone and right zone inside appointment */
+    .appt .zone-left{width:50%;padding-right:6px;box-sizing:border-box;border-right:1px solid rgba(0,0,0,0.06)}
+    .appt .zone-right{width:50%;padding-left:6px;box-sizing:border-box}
+
+    /* modal */
+    .modal-back{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center}
+    .modal{background:#fff;padding:16px;border-radius:10px;width:520px;box-shadow:0 30px 60px rgba(0,0,0,0.25)}
+    .row{display:flex;gap:8px;margin-bottom:8px}
+    label{font-size:13px;color:#333}
+    input,select,textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px}
+    textarea{min-height:70px}
+    .btn{padding:8px 12px;border-radius:8px;border:0;background:#2563eb;color:#fff;font-weight:600;cursor:pointer}
+    .btn.ghost{background:#e5e7eb;color:#111}
+
+    .tooltip{position:fixed;background:rgba(0,0,0,0.88);color:#fff;padding:8px;border-radius:8px;font-size:13px;max-width:360px;display:none;z-index:9999}
+
+    @media(max-width:980px){:root{--cab-width:240px;--time-col-width:58px}}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div style="font-weight:700;font-size:16px">Programator Pacienți — final (all features)</div>
+    <div style="flex:1"></div>
+    <div class="date-stack">
+      <div class="date-row">
+        <div style="font-weight:600">An:</div>
+        <div class="date-scroll" id="years"></div>
+      </div>
+      <div class="date-row">
+        <div style="font-weight:600">Lună:</div>
+        <div class="date-scroll" id="months"></div>
+      </div>
+      <div class="date-row">
+        <div style="font-weight:600">Zi:</div>
+        <div class="date-scroll" id="days"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app">
+    <div class="times" id="timesCol"></div>
+    <div class="board" id="board">
+      <div class="cabinet" data-cabinet="1">
+        <div class="header">Cabinet 1</div>
+        <div class="timeline" id="cab1"></div>
+      </div>
+      <div class="cabinet" data-cabinet="2">
+        <div class="header">Cabinet 2</div>
+        <div class="timeline" id="cab2"></div>
+      </div>
+      <div class="cabinet" data-cabinet="3">
+        <div class="header">Cabinet 3</div>
+        <div class="timeline" id="cab3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- modal create/edit -->
+  <div id="modal" style="display:none">
+    <div class="modal-back" id="modalBack">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h3 id="modalTitle">Adaugă/Editează programare</h3>
+        <div class="row"><div style="flex:1"><label>Nume pacient</label><input id="inpName" placeholder="Prenume Nume"></div><div style="width:110px"><label>Vârstă</label><input id="inpAge" type="number" min="0"></div></div>
+        <div class="row"><div style="flex:1"><label>Medic</label><select id="inpDoctor"></select></div><div style="flex:1"><label>Tratament</label><select id="inpTreat"></select></div></div>
+        <div class="row"><div style="flex:1"><label>Cabinet</label><select id="inpCab"></select></div><div style="width:140px"><label>Start (HH:MM)</label><input id="inpStart" value="09:00"></div><div style="width:120px"><label>Durată (min)</label><input id="inpDur" value="30" type="number"></div></div>
+        <div class="row"><div style="flex:1"><label>Mentiuni</label><textarea id="inpNotes"></textarea></div></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+          <button id="btnCancel" class="btn ghost">Anulează</button>
+          <button id="btnSave" class="btn">Salvează</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    // --- Data
+    const doctors = [
+      {id:'d1',nume:'Dr. Andrei Pop', culoare:'#ef6c6c'},
+      {id:'d2',nume:'Dr. Maria Ionescu', culoare:'#f39c12'},
+      {id:'d3',nume:'Dr. Radu Enache', culoare:'#4fd1c5'},
+      {id:'d4',nume:'Dr. Ana Georgescu', culoare:'#9f7aea'},
+      {id:'d5',nume:'Dr. Mihai Luca', culoare:'#34d399'}
+    ];
+    const treatments = [
+      {id:'t1',nume:'Protetica', culoare:'#ffecee'},
+      {id:'t2',nume:'Parodontologie', culoare:'#fff8e6'},
+      {id:'t3',nume:'Endodontie', culoare:'#effaf5'},
+      {id:'t4',nume:'Ortodonție', culoare:'#fffaf0'},
+      {id:'t5',nume:'Chirurgie', culoare:'#fff1f2'},
+      {id:'t6',nume:'Profilaxie', culoare:'#f0f9ff'},
+      {id:'t7',nume:'Estetică', culoare:'#fff8f5'}
+    ];
+
+    // appointments storage
+    // {id,cab,startMin,dur,name,age,doctorId,treatId,notes,date}
+    let appts = [];
+
+    // selected date (ISO yyyy-mm-dd)
+    const today = new Date();
+    let selectedDate = today.toISOString().slice(0,10);
+
+    // populate selects and left time column
+    const inpDoctor = document.getElementById('inpDoctor');
+    const inpTreat = document.getElementById('inpTreat');
+    const inpCab = document.getElementById('inpCab');
+    doctors.forEach(d=>{ const o=document.createElement('option'); o.value=d.id; o.textContent=d.nume; inpDoctor.appendChild(o)});
+    treatments.forEach(t=>{ const o=document.createElement('option'); o.value=t.id; o.textContent=t.nume; inpTreat.appendChild(o)});
+    [1,2,3].forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent='Cabinet '+c; inpCab.appendChild(o) });
+
+    const timesCol = document.getElementById('timesCol');
+    for(let h=0;h<24;h++){ const div=document.createElement('div'); div.className='slot'; div.style.height='60px'; div.textContent=String(h).padStart(2,'0')+':00'; timesCol.appendChild(div)}
+
+    // date bars (years/months/days clickable)
+    const years = document.getElementById('years'), months = document.getElementById('months'), days = document.getElementById('days');
+    let selYear = today.getFullYear(), selMonth = today.getMonth(), selDay = today.getDate();
+
+    function renderYears(){ years.innerHTML=''; for(let y=selYear-2;y<=selYear+2;y++){ const d=document.createElement('div'); d.className='date-item'+(y===selYear?' active':''); d.textContent=y; d.onclick=()=>{ selYear=y; renderYears(); renderDays(); loadForSelectedDate(); }; years.appendChild(d) } }
+    function renderMonths(){ months.innerHTML=''; const names=['Ianuarie','Februarie','Martie','Aprilie','Mai','Iunie','Iulie','August','Septembrie','Octombrie','Noiembrie','Decembrie']; for(let m=0;m<12;m++){ const d=document.createElement('div'); d.className='date-item'+(m===selMonth?' active':''); d.textContent=names[m]; d.onclick=()=>{ selMonth=m; renderMonths(); renderDays(); loadForSelectedDate(); }; months.appendChild(d) } }
+    function renderDays(){ days.innerHTML=''; const daysInMonth = new Date(selYear, selMonth+1,0).getDate(); for(let di=1;di<=daysInMonth;di++){ const d=document.createElement('div'); d.className='date-item'+(di===selDay?' active':''); d.textContent=di; d.onclick=()=>{ selDay=di; renderDays(); loadForSelectedDate(); }; days.appendChild(d) } }
+    renderYears(); renderMonths(); renderDays();
+
+    function setSelectedDateFromSel(){ const mm = String(selMonth+1).padStart(2,'0'); const dd=String(selDay).padStart(2,'0'); selectedDate = `${selYear}-${mm}-${dd}`; }
+
+    // helpers
+    function hhmmToMin(str){ const p=str.split(':').map(x=>parseInt(x)); return (p[0]||0)*60 + (p[1]||0); }
+    function minToHhmm(m){ const hh=Math.floor(m/60); const mm=m%60; return String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0'); }
+    function minToPx(m){ return m; } // 1 min = 1px (timeline height 1440)
+    function pxToMin(px){ return Math.max(0, Math.min(1439, Math.round(px))); }
+
+    // render appointments for selectedDate
+    function renderAll(){
+      setSelectedDateFromSel();
+      [1,2,3].forEach(c=>{
+        const container = document.getElementById('cab'+c);
+        container.innerHTML = '';
+        // grid lines
+        for(let h=0;h<=24;h++){ const line=document.createElement('div'); line.className='hour-line'; line.style.top=(h*60)+'px'; line.style.position='absolute'; line.style.left=0; line.style.right=0; line.style.borderTop='1px solid rgba(0,0,0,0.03)'; container.appendChild(line)}
+        // appointments for this cabinet and date
+        const list = appts.filter(a=>a.cab==c && a.date===selectedDate);
+        // handle overlaps: simple algorithm to assign column positions
+        const groups = [];
+        list.sort((a,b)=>a.startMin - b.startMin);
+        list.forEach(a=>{
+          let placed=false;
+          for(const g of groups){ if(!g.some(x=>rangesOverlap(x.startMin,x.startMin+x.dur,a.startMin,a.startMin+a.dur))){ g.push(a); placed=true; break } }
+          if(!placed) groups.push([a]);
+        });
+        // create elements with column assignments within overlapping groups
+        list.forEach((a)=>{
+          const overlapping = list.filter(b=>rangesOverlap(a.startMin,a.startMin+a.dur,b.startMin,b.startMin+b.dur));
+          const colsTotal = overlapping.length || 1;
+          const ordered = overlapping.sort((x,y)=>x.startMin - y.startMin);
+          const colIndex = ordered.indexOf(a);
+          const doc = doctors.find(d=>d.id===a.doctorId) || doctors[0];
+          const tr = treatments.find(t=>t.id===a.treatId) || treatments[0];
+
+          const el = document.createElement('div'); el.className='appt'; el.dataset.id=a.id;
+          const top = minToPx(a.startMin); const height = Math.max(18,a.dur);
+          el.style.top = top+'px'; el.style.height = height+'px';
+          const leftPct = (100/colsTotal)*colIndex; const widthPct = 100/colsTotal;
+          el.style.left = `calc(${leftPct}% + 8px)`; el.style.width = `calc(${widthPct}% - 16px)`;
+          // soft gradient with slightly desaturated colors to keep text readable
+          const leftCol = hexToRgba(doc.culoare, 0.92);
+          const rightCol = hexToRgba(tr.culoare, 0.95);
+          el.style.background = `linear-gradient(90deg, ${leftCol} 0%, ${leftCol} 48%, ${rightCol} 52%, ${rightCol} 100%)`;
+          // store original left for expanded calculation
+          el.style.setProperty('--left-start', `calc(${leftPct}% )`);
+
+          // content: left zone shows doctor, right zone shows treatment; text of patient shown prefixed
+          const leftZone = document.createElement('div'); leftZone.className='zone-left'; leftZone.innerHTML = `<div class="label">${a.name} (${a.age || ''})</div><div class="meta">${doc.nume}</div>`;
+          const rightZone = document.createElement('div'); rightZone.className='zone-right'; rightZone.innerHTML = `<div class="meta">${tr.nume}</div>`;
+          el.appendChild(leftZone); el.appendChild(rightZone);
+
+          // tooltip details on hover and expand
+          el.addEventListener('mouseenter', (ev)=>{ el.classList.add('expanded'); showTooltip(a, ev.pageX, ev.pageY); });
+          el.addEventListener('mousemove', (ev)=>{ moveTooltip(ev.pageX, ev.pageY); });
+          el.addEventListener('mouseleave', ()=>{ el.classList.remove('expanded'); hideTooltip(); });
+
+          container.appendChild(el);
+          attachInteractions(el);
+        });
+      });
+    }
+
+    function rangesOverlap(a1,a2,b1,b2){ return a1 < b2 && b1 < a2; }
+
+    // tooltip helpers
+    const tooltip = document.getElementById('tooltip');
+    function showTooltip(a, x, y){ const doc = doctors.find(d=>d.id===a.doctorId); const tr=treatments.find(t=>t.id===a.treatId); tooltip.innerHTML = `<strong>${a.name}</strong><br>${a.age?('Vârstă: '+a.age+' ani<br>'):''}${doc?('Med: '+doc.nume+'<br>'):''}${tr?('Trat: '+tr.nume+'<br>'):''}${a.notes?('Mentiuni: '+a.notes):''}`; tooltip.style.display='block'; moveTooltip(x,y); }
+    function moveTooltip(x,y){ tooltip.style.left = (x+12) + 'px'; tooltip.style.top = (y+12) + 'px'; }
+    function hideTooltip(){ tooltip.style.display='none'; }
+
+    // convert hex to rgba with alpha
+    function hexToRgba(hex, alpha){
+      const h = hex.replace('#',''); const r = parseInt(h.substring(0,2),16); const g = parseInt(h.substring(2,4),16); const b = parseInt(h.substring(4,6),16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    // modal logic
+    const modal = document.getElementById('modal'); const modalBack = document.getElementById('modalBack');
+    const inpName = document.getElementById('inpName');
+    const inpAge = document.getElementById('inpAge');
+    const inpDoctorSel = document.getElementById('inpDoctor');
+    const inpTreatSel = document.getElementById('inpTreat');
+    const inpCabSel = document.getElementById('inpCab');
+    const inpStart = document.getElementById('inpStart');
+    const inpDur = document.getElementById('inpDur');
+    const inpNotes = document.getElementById('inpNotes');
+    const btnCancel = document.getElementById('btnCancel');
+    const btnSave = document.getElementById('btnSave');
+
+    btnCancel.onclick = ()=>{ modal.style.display='none'; }
+
+    function initModalSelects(){ inpDoctorSel.innerHTML=''; inpTreatSel.innerHTML=''; inpCabSel.innerHTML=''; doctors.forEach(d=>{ const o=document.createElement('option'); o.value=d.id; o.textContent=d.nume; inpDoctorSel.appendChild(o)}); treatments.forEach(t=>{ const o=document.createElement('option'); o.value=t.id; o.textContent=t.nume; inpTreatSel.appendChild(o)}); [1,2,3].forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent='Cabinet '+c; inpCabSel.appendChild(o)}); }
+    initModalSelects();
+
+    let editingId = null; // if editing existing appt
+
+    function openModalForNew(cab, startMin){
+      editingId = null; modal.style.display='block'; document.getElementById('modalTitle').textContent='Adaugă programare';
+      inpName.value=''; inpAge.value=''; inpDoctorSel.value=doctors[0].id; inpTreatSel.value=treatments[0].id; inpCabSel.value=cab; inpStart.value=minToHhmm(startMin||9*60); inpDur.value=30; inpNotes.value='';
+    }
+
+    function openModalForEdit(ap){ editingId = ap.id; modal.style.display='block'; document.getElementById('modalTitle').textContent='Editează programare'; inpName.value=ap.name; inpAge.value=ap.age||''; inpDoctorSel.value=ap.doctorId; inpTreatSel.value=ap.treatId; inpCabSel.value=ap.cab; inpStart.value=minToHhmm(ap.startMin); inpDur.value=ap.dur; inpNotes.value=ap.notes||''; }
+
+    btnSave.onclick = ()=>{
+      const name = inpName.value || 'Anonim'; const age = inpAge.value || '';
+      const doctorId = inpDoctorSel.value; const treatId = inpTreatSel.value; const cabsel = Number(inpCabSel.value);
+      const startMinVal = hhmmToMin(inpStart.value); const dur = Math.max(5, parseInt(inpDur.value)||30); const notes = inpNotes.value||'';
+      if(editingId){ const ap = appts.find(a=>a.id===editingId); if(ap){ ap.name=name; ap.age=age; ap.doctorId=doctorId; ap.treatId=treatId; ap.cab=cabsel; ap.startMin=startMinVal; ap.dur=dur; ap.notes=notes; ap.date = selectedDate; } }
+      else { appts.push({id:'a'+Date.now()+Math.random().toString(36).slice(2,6), cab:cabsel, startMin:startMinVal, dur:dur, name, age, doctorId, treatId, notes, date:selectedDate}); }
+      modal.style.display='none'; renderAll();
+    }
+
+    // dblclick to create (prefilled start time)
+    document.querySelectorAll('.timeline').forEach(tl=>{
+      tl.ondblclick = (e)=>{
+        const rect = tl.getBoundingClientRect();
+        const y = e.clientY - rect.top; const startMin = Math.max(0, Math.min(1439, Math.floor(y)) );
+        const cabinet = Number(tl.id.replace('cab',''));
+        openModalForNew(cabinet, startMin);
+      }
+    });
+
+    // interactions: drag (move cabinet+time) and resize
+    let dragState = null; // {id, startY, startTop, startH, isResizing, fromCab}
+
+    function attachInteractions(el){
+      const id = el.dataset.id;
+      // we use pointer events on document to allow smooth dragging even if pointer leaves element
+      el.addEventListener('pointerdown', (ev)=>{
+        ev.preventDefault(); el.setPointerCapture(ev.pointerId);
+        const rect = el.getBoundingClientRect();
+        const parentRect = el.parentElement.getBoundingClientRect();
+        const isResizing = ev.target.classList.contains('resize');
+        dragState = { id, startY:ev.clientY, startTop:rect.top - parentRect.top, startH:rect.height, isResizing, fromCab:+el.parentElement.id.replace('cab','') };
+      });
+
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', onPointerUp);
+
+      el.addEventListener('click', (ev)=>{
+        ev.stopPropagation(); const ap = appts.find(a=>a.id===id); if(!ap) return; openModalForEdit(ap);
+      });
+    }
+
+    function onPointerMove(ev){ if(!dragState) return; const el = document.querySelector(`[data-id="${dragState.id}"]`); if(!el) return; const container = document.querySelector(`#cab${dragState.fromCab}`); if(dragState.isResizing){ const dy = ev.clientY - dragState.startY; const newH = Math.max(10, dragState.startH + dy); el.style.height = newH + 'px'; } else { const dy = ev.clientY - dragState.startY; const newTop = Math.max(0, dragState.startTop + dy); el.style.top = newTop + 'px'; // while dragging horizontally, visually highlight target cabinet
+        const boardRect = document.getElementById('board').getBoundingClientRect(); const relX = ev.clientX - boardRect.left; const cabIdx = Math.floor(relX / (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cab-width')))); document.querySelectorAll('.cabinet').forEach((c,i)=> c.style.outline = (i===cabIdx? '2px dashed rgba(37,99,235,0.35)':'none') ); }
+    }
+
+    function onPointerUp(ev){ if(!dragState) return; const el = document.querySelector(`[data-id="${dragState.id}"]`); if(!el){ dragState=null; return; } try{ el.releasePointerCapture(ev.pointerId);}catch(e){}
+      // clear outlines
+      document.querySelectorAll('.cabinet').forEach(c=> c.style.outline='none');
+      const ap = appts.find(a=>a.id===dragState.id); if(!ap){ dragState=null; return; }
+      if(dragState.isResizing){ const h = parseFloat(el.style.height); ap.dur = Math.max(5, Math.round(h)); }
+      else { const top = parseFloat(el.style.top); ap.startMin = pxToMin(top);
+        const boardRect = document.getElementById('board').getBoundingClientRect(); const relX = ev.clientX - boardRect.left; const newCab = Math.floor(relX / (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cab-width'))) ) + 1; if(newCab>=1 && newCab<=3) ap.cab = newCab;
+      }
+      dragState=null; renderAll(); }
+
+    // load appointments for selectedDate (and render)
+    function loadForSelectedDate(){ setSelectedDateFromSel(); renderAll(); }
+
+    // small helpers + demo data
+    function truncateText(s,len){ return s.length>len? s.slice(0,len-1)+'…': s }
+    appts.push({id:'a1',cab:1,startMin:9*60,dur:45,name:'Ioana M.',age:33,doctorId:'d2',treatId:'t1',notes:'Prima vizită',date:selectedDate});
+    appts.push({id:'a2',cab:1,startMin:9*60+30,dur:30,name:'Vlad P.',age:28,doctorId:'d1',treatId:'t3',notes:'Control',date:selectedDate});
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1); const tdate = tomorrow.toISOString().slice(0,10);
+    appts.push({id:'a3',cab:2,startMin:10*60,dur:60,name:'Mihnea B.',age:41,doctorId:'d3',treatId:'t4',notes:'',date:tdate});
+
+    // initial render
+    renderAll();
+
+  </script>
+</body>
+</html>
